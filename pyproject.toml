@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skillvet"
+version = "1.0.0"
+description = "The trust gate for agent skills — vet a Claude Skill, MCP server, or agent plugin before you install it. Static capability analysis + trust verdict, offline."
+authors = [{name = "Cognis Digital", email = "suite@cognis.digital"}]
+license = {text = "LicenseRef-COCL-1.0"}
+requires-python = ">=3.10"
+readme = "README.md"
+keywords = ["ai-security","agent-security","mcp","claude-skills","supply-chain","llm-security","static-analysis","trust","security","plugins"]
+classifiers = ["Development Status :: 5 - Production/Stable","Environment :: Console","License :: Other/Proprietary License","Programming Language :: Python :: 3.10","Programming Language :: Python :: 3.11","Programming Language :: Python :: 3.12","Topic :: Security"]
+dependencies = []
+
+[project.optional-dependencies]
+content = ["agentsigs>=1.0"]
+dev = ["pytest>=8.0", "agentsigs>=1.0"]
+
+[project.urls]
+Homepage = "https://cognis.digital"
+Repository = "https://github.com/cognis-digital/skillvet"
+Documentation = "https://github.com/cognis-digital/skillvet/tree/main/docs"
+Discussions = "https://github.com/cognis-digital/skillvet/discussions"
+
+[project.scripts]
+skillvet = "skillvet.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["skillvet"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,29 @@
+# How skillvet works
+
+skillvet is a **static** analyzer: it reads a package and reports what the code is *capable of*,
+without ever running it. That's what makes it safe to use as a pre-install gate — you learn what a
+skill can do before it touches a machine with your credentials.
+
+## The pipeline
+1. **Walk the package** — every file, skipping `node_modules`, `.git`, `__pycache__`.
+2. **Capability scan** — code files (`.py/.js/.ts/.sh/...`) are matched against capability patterns:
+   process execution, network egress, credential/filesystem access, obfuscation, dynamic remote
+   fetch. One finding per capability per file, each tagged with a MITRE ATLAS technique.
+3. **Install-hook scan** — `package.json` (pre/postinstall), `setup.py`, and build hooks that run
+   code *at install time* — the classic supply-chain foothold.
+4. **Content scan (optional)** — with the `content` extra, the skill's prose (`SKILL.md`, tool
+   descriptions) is scanned by [agentsigs](https://github.com/cognis-digital/agentsigs) for prompt
+   injection and tool poisoning.
+5. **Score + verdict** — capabilities subtract weight from a 100-point trust score. Any critical
+   capability, or a score under 40, is **BLOCK**; anything with findings is at least **REVIEW**; a
+   clean, inert package is **TRUST**.
+
+## Reading the verdict
+- **TRUST** — no dangerous capabilities. A passive skill (text transforms, formatting) lands here.
+- **REVIEW** — capable of more than a passive skill; read the flagged lines and decide.
+- **BLOCK** — can execute, exfiltrate, or read credentials. Don't install without manual review.
+
+## Limits (be honest)
+Static analysis sees capabilities, not intent — a legitimate skill may genuinely need the network.
+skillvet's job is to make sure you *know* what a skill can do and made a deliberate choice, not to
+prove maliciousness. It complements, not replaces, sandboxing and least-privilege.
