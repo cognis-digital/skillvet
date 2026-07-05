@@ -79,7 +79,7 @@ skillvet vet "$SKILL_DIR" || { echo "skill failed trust gate"; exit 1; }
 ```
 
 **Deeper content scan:** install the `content` extra to also scan the skill's prose for
-prompt-injection / tool-poisoning via [agentsigs](https://github.com/cognis-digital/agentsigs):
+prompt-injection / tool-poisoning via [shrike](https://github.com/cognis-digital/shrike):
 ```bash
 pip install "skillvet[content]"
 skillvet vet ./skill                 # now also flags poisoned SKILL.md / tool descriptions
@@ -91,11 +91,10 @@ skillvet **never executes** the package — that's the point of a pre-install ga
 files and reports capabilities. It runs fully offline, so you can vet a skill on an air-gapped box
 before it ever reaches a machine with your credentials on it.
 
-## The Cognis AI-security trio
+## Pairs with shrike
 
 - **[skillvet](https://github.com/cognis-digital/skillvet)** — vet a skill/plugin *before* you install it (this repo)
-- **[shrike](https://github.com/cognis-digital/shrike)** — audit the MCP servers already wired into your stack
-- **[agentsigs](https://github.com/cognis-digital/agentsigs)** — the signature library both use for content threats
+- **[shrike](https://github.com/cognis-digital/shrike)** — audit the MCP servers already wired into your stack, and the AI-threat signature library skillvet's `content` extra uses to scan a skill's prose
 
 ## Defensive use
 

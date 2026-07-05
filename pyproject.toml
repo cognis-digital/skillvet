@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skillvet"
-version = "1.0.0"
+version = "1.1.0"
 description = "The trust gate for agent skills — vet a Claude Skill, MCP server, or agent plugin before you install it. Static capability analysis + trust verdict, offline."
 authors = [{name = "Cognis Digital", email = "suite@cognis.digital"}]
 license = {text = "LicenseRef-COCL-1.0"}
@@ -15,8 +15,8 @@ classifiers = ["Development Status :: 5 - Production/Stable","Environment :: Con
 dependencies = []
 
 [project.optional-dependencies]
-content = ["agentsigs>=1.0"]
-dev = ["pytest>=8.0", "agentsigs>=1.0"]
+content = ["shrike-sec>=1.1"]
+dev = ["pytest>=8.0", "shrike-sec>=1.1"]
 
 [project.urls]
 Homepage = "https://cognis.digital"

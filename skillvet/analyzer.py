@@ -39,7 +39,7 @@ CHECKS: Dict[str, dict] = {
     ]},
     "obfuscation": {"severity": "high", "weight": 20, "atlas": "AML.T0051", "patterns": [
         (r"base64\.b64decode[^\n]{0,40}(exec|eval|decode)", "decodes then executes base64"),
-        (r"\bexec\s*\(\s*(base64|bytes\.fromhex|codecs\.decode)", "executes decoded bytes"),
+        (r"\b(exec|eval)\s*\(\s*(base64|bytes\.fromhex|codecs\.decode)", "executes decoded bytes"),
         (r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{200,}={0,2}(?![A-Za-z0-9+/])", "contains a long encoded blob"),
         (r"\\x[0-9a-fA-F]{2}(\\x[0-9a-fA-F]{2}){20,}", "contains a long hex-escaped blob"),
     ]},
@@ -150,11 +150,15 @@ def analyze(path: str, content_scan: bool = True) -> Verdict:
 
 
 def _agentsigs_scan(path: str) -> int:
-    """Optional: if agentsigs is installed, scan the package's prose for injection/poisoning."""
+    """Optional: if shrike is installed, scan the package's prose for injection/poisoning using
+    its bundled AI-threat signature library (formerly the standalone agentsigs)."""
     try:
-        from agentsigs.engine import Library
+        from shrike.sigs import Library
     except Exception:
-        return 0
+        try:
+            from agentsigs.engine import Library  # backward-compat if the old package is present
+        except Exception:
+            return 0
     lib = Library()
     total = 0
     target = path
