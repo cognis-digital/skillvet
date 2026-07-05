@@ -9,6 +9,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, express or impli
 ## Authorized Use Only (dual-use security software)
 Use only against systems, networks, accounts, and data you own or are **explicitly authorized in writing** to test, and in full compliance with applicable law. You are solely responsible for your use. Unauthorized use may be illegal.
 
+## Not Financial Advice
+This software and its outputs do **not** constitute financial, investment, or trading advice. Trading and investing carry substantial risk of loss. Decisions and outcomes are entirely your own; past or simulated performance does not predict future results.
+
 ## AI Output Notice
 AI/ML outputs are probabilistic and may be inaccurate, incomplete, biased, or fabricated ("hallucinations"). Verify independently before relying on them; do not use outputs as the sole basis for consequential decisions.
 
