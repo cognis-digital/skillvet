@@ -1,11 +1,60 @@
 name: CI
 on: [push, pull_request]
+
 jobs:
   test:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # Core is stdlib-only; install pytest without the optional shrike-sec content extra
+      # so we prove the content scan degrades gracefully when shrike is absent.
+      - run: python -m pip install --upgrade pip && pip install pytest
+      - run: pip install -e .
+      - run: python -m pytest -q
+
+  smoke:
+    name: CLI smoke + demos
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]" || pip install pytest
-      - run: pytest -q
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: vet benign -> exit 0 (TRUST)
+        run: |
+          skillvet vet demos/benign-skill --no-content
+      - name: vet malicious -> exit 2 (BLOCK)
+        run: |
+          set +e
+          skillvet vet demos/malicious-skill --no-content
+          [ "$?" -eq 2 ] || { echo "expected BLOCK exit 2"; exit 1; }
+      - name: SARIF export is valid JSON 2.1.0
+        run: |
+          skillvet vet demos/malicious-skill --no-content -f sarif > skillvet.sarif
+          python -c "import json,sys; d=json.load(open('skillvet.sarif')); assert d['version']=='2.1.0'; assert d['runs'][0]['tool']['driver']['name']=='skillvet'; print('sarif ok')"
+      - name: baseline + rug-pull diff -> exit 2
+        run: |
+          skillvet baseline demos/rugpull/v1-benign --no-content -o baseline.json
+          set +e
+          skillvet diff baseline.json demos/rugpull/v2-malicious --no-content
+          [ "$?" -eq 2 ] || { echo "expected rug-pull exit 2"; exit 1; }
+      - name: run all demos -> exit 0
+        run: python demos/run_all.py
+
+      # Optional: upload SARIF to GitHub code scanning (best-effort; skipped on forks/PRs w/o perms)
+      - name: Upload SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: skillvet.sarif
+          category: skillvet
