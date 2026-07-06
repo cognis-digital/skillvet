@@ -39,7 +39,9 @@ jobs:
           [ "$?" -eq 2 ] || { echo "expected BLOCK exit 2"; exit 1; }
       - name: SARIF export is valid JSON 2.1.0
         run: |
+          set +e
           skillvet vet demos/malicious-skill --no-content -f sarif > skillvet.sarif
+          set -e
           python -c "import json,sys; d=json.load(open('skillvet.sarif')); assert d['version']=='2.1.0'; assert d['runs'][0]['tool']['driver']['name']=='skillvet'; print('sarif ok')"
       - name: baseline + rug-pull diff -> exit 2
         run: |
