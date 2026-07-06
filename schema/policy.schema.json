@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cognis-digital/skillvet/schema/policy.schema.json",
+  "title": "skillvet policy",
+  "description": "Tune skillvet's scoring weights, verdict thresholds, and per-capability allow/deny. A policy never weakens skillvet's ability to SEE a capability; it only changes how that capability scores and gates.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human label for this policy, shown in output."
+    },
+    "block_below": {
+      "type": "integer", "minimum": 0, "maximum": 100, "default": 40,
+      "description": "Trust score strictly below this value => BLOCK."
+    },
+    "review_below": {
+      "type": "integer", "minimum": 0, "maximum": 100, "default": 75,
+      "description": "Trust score strictly below this value => at least REVIEW."
+    },
+    "content_weight": {
+      "type": "integer", "minimum": 0, "default": 8,
+      "description": "Score penalty per content-signature match (total capped at 24)."
+    },
+    "weights": {
+      "type": "object",
+      "description": "Override the default per-capability score penalty.",
+      "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 100 }
+    },
+    "allow": {
+      "type": "array", "items": { "type": "string" },
+      "description": "Capabilities that contribute 0 to the score and never force a verdict (still reported)."
+    },
+    "deny": {
+      "type": "array", "items": { "type": "string" },
+      "description": "Capabilities that force an unconditional BLOCK if present."
+    }
+  }
+}
