@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cognis-digital/skillvet/schema/baseline.schema.json",
+  "title": "skillvet baseline",
+  "description": "A fingerprint of a package you reviewed and trusted, so a later update can be diffed against it to detect a rug-pull (new dangerous capabilities appearing on 'update').",
+  "type": "object",
+  "required": ["version", "package", "score", "verdict", "capabilities", "files", "self_hash"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "description": "Baseline format version." },
+    "package": { "type": "string", "description": "Package name at record time." },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "verdict": { "type": "string", "enum": ["TRUST", "REVIEW", "BLOCK"] },
+    "capabilities": {
+      "type": "array", "items": { "type": "string" },
+      "description": "Capability set observed at record time."
+    },
+    "files": {
+      "type": "object",
+      "description": "Per-file SHA-256, keyed by forward-slash relative path.",
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    },
+    "self_hash": {
+      "type": "string", "pattern": "^[0-9a-f]{32}$",
+      "description": "BLAKE2b (16-byte) over the canonical body — a tamper check on the baseline file itself."
+    }
+  }
+}

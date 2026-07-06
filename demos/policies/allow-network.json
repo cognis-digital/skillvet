@@ -1,0 +1,7 @@
+{
+  "name": "allow-network",
+  "review_below": 75,
+  "block_below": 40,
+  "allow": ["network_egress"],
+  "weights": { "filesystem_write": 5 }
+}

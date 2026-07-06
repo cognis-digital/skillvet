@@ -1,0 +1,5 @@
+{
+  "name": "strict-no-exec",
+  "review_below": 85,
+  "deny": ["process_exec", "dynamic_fetch"]
+}

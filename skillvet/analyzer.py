@@ -4,12 +4,21 @@ skillvet never runs the package. It reads the files and looks for the capabiliti
 whether a skill is safe to trust: network egress, process execution, credential/filesystem access,
 install hooks, and hidden/obfuscated code — plus (optionally) an agentsigs content scan of the
 skill's prose. It turns those into a 0-100 trust score and a TRUST / REVIEW / BLOCK verdict.
+
+Two correlated signals sit on top of the per-file capability checks:
+  - exfiltration_surface: credential_access + network_egress in the same file/package is worse
+    than either alone (read secrets AND phone home = a exfil path).
+  - manifest_overbroad: a manifest that DECLARES a permission/scope the code never uses (or
+    declares broad exec/network/fs permissions at all) is an over-broad request.
 """
 from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+from .manifest import scan_manifests
+from .policy import Policy
 
 CODE_EXT = (".py", ".js", ".ts", ".mjs", ".sh", ".bash", ".rb", ".ps1")
 TEXT_EXT = (".md", ".txt", ".json", ".yaml", ".yml", ".toml")
@@ -49,6 +58,28 @@ CHECKS: Dict[str, dict] = {
     ]},
 }
 
+# Capabilities that have no regex patterns of their own — they are derived (correlated or
+# parsed from manifests). They still carry severity/weight/atlas so scoring and SARIF are uniform.
+DERIVED = {
+    "install_hook": {"severity": "high", "weight": 20, "atlas": "AML.T0053",
+                     "why": "runs code at install time (supply-chain foothold)"},
+    "exfiltration_surface": {"severity": "critical", "weight": 25, "atlas": "AML.T0025",
+                             "why": "reads credentials AND has network egress in the same package (exfil path)"},
+    "manifest_overbroad": {"severity": "high", "weight": 15, "atlas": "AML.T0051",
+                           "why": "manifest declares broad or unused permissions/scopes"},
+}
+
+
+def check_meta(cap: str) -> dict:
+    """Uniform metadata (severity/weight/atlas) for any capability, declared or derived."""
+    if cap in CHECKS:
+        return CHECKS[cap]
+    return DERIVED.get(cap, {"severity": "medium", "weight": 10, "atlas": ""})
+
+
+# Every capability skillvet can emit, for SARIF rule enumeration and docs.
+ALL_CAPABILITIES = tuple(list(CHECKS) + list(DERIVED))
+
 INSTALL_HOOK_FILES = {
     "package.json": [(r'"(pre|post)?install"\s*:', "npm install hook runs code on install")],
     "setup.py": [(r"\b(cmdclass|subprocess|os\.system|exec)\b", "setup.py runs code on install")],
@@ -72,23 +103,36 @@ class Verdict:
     findings: List[Finding] = field(default_factory=list)
     content_matches: int = 0
     files_scanned: int = 0
+    policy: Policy = field(default_factory=Policy)
 
     @property
     def score(self) -> int:
-        """0-100 trust score; 100 = clean. Capabilities subtract weight (deduped per capability)."""
-        seen = {}
+        """0-100 trust score; 100 = clean. Capabilities subtract weight (deduped per capability).
+
+        Weights come from the active policy (defaults mirror check_meta). An allow-listed
+        capability contributes 0; a deny-listed capability forces the floor via verdict()."""
+        seen: Dict[str, int] = {}
         for f in self.findings:
-            seen[f.capability] = max(seen.get(f.capability, 0), CHECKS.get(f.capability, {}).get("weight", 10))
-        penalty = sum(seen.values()) + min(self.content_matches * 8, 24)
+            if self.policy.is_allowed(f.capability):
+                continue
+            w = self.policy.weight(f.capability, check_meta(f.capability).get("weight", 10))
+            seen[f.capability] = max(seen.get(f.capability, 0), w)
+        penalty = sum(seen.values()) + min(self.content_matches * self.policy.content_weight, 24)
         return max(0, 100 - penalty)
 
     @property
     def verdict(self) -> str:
-        s = self.score
-        crit = any(f.severity == "critical" for f in self.findings)
-        if crit or s < 40:
+        caps = set(self.capabilities)
+        # A deny-listed capability is an unconditional BLOCK regardless of score.
+        if any(self.policy.is_denied(c) for c in caps):
             return "BLOCK"
-        if s < 75 or self.findings or self.content_matches:
+        s = self.score
+        crit = any(f.severity == "critical" and not self.policy.is_allowed(f.capability)
+                   for f in self.findings)
+        active = [f for f in self.findings if not self.policy.is_allowed(f.capability)]
+        if crit or s < self.policy.block_below:
+            return "BLOCK"
+        if s < self.policy.review_below or active or self.content_matches:
             return "REVIEW"
         return "TRUST"
 
@@ -117,22 +161,47 @@ def _scan_install_hooks(name: str, text: str, path: str, out: List[Finding]) -> 
             break
 
 
-def analyze(path: str, content_scan: bool = True) -> Verdict:
+def _add_exfiltration_surface(findings: List[Finding]) -> None:
+    """Correlated signal: credential_access + network_egress => an exfiltration surface.
+
+    Same-file correlation is the strongest signal (read a secret and phone home on the same
+    line of code). Package-level correlation (both present anywhere) is still elevated."""
+    meta = DERIVED["exfiltration_surface"]
+    by_file: Dict[str, set] = {}
+    for f in findings:
+        by_file.setdefault(f.file, set()).add(f.capability)
+    # Same-file: the credential read and the egress live in one module.
+    for fp, caps in by_file.items():
+        if "credential_access" in caps and "network_egress" in caps:
+            findings.append(Finding("exfiltration_surface", meta["severity"],
+                                    "same file reads credentials and has network egress",
+                                    fp, 0, meta["atlas"]))
+            return
+    # Package-level: still an exfil path, just spread across files.
+    all_caps = {f.capability for f in findings}
+    if "credential_access" in all_caps and "network_egress" in all_caps:
+        findings.append(Finding("exfiltration_surface", meta["severity"],
+                                meta["why"], "<package>", 0, meta["atlas"]))
+
+
+def analyze(path: str, content_scan: bool = True, policy: Optional[Policy] = None) -> Verdict:
     """Analyze a package directory (or a single file) and return a Verdict."""
-    v = Verdict(package=os.path.basename(os.path.abspath(path)))
+    v = Verdict(package=os.path.basename(os.path.abspath(path)),
+                policy=policy or Policy())
     files = []
     if os.path.isfile(path):
         files = [path]
     else:
         for root, _, fnames in os.walk(path):
-            if any(skip in root for skip in ("node_modules", ".git", "__pycache__")):
+            if any(skip in root.split(os.sep) for skip in ("node_modules", ".git", "__pycache__")):
                 continue
             for f in fnames:
                 files.append(os.path.join(root, f))
     for fp in files:
         base = os.path.basename(fp)
         try:
-            text = open(fp, encoding="utf-8", errors="replace").read()
+            with open(fp, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
         except Exception:
             continue
         if base in INSTALL_HOOK_FILES:
@@ -144,6 +213,12 @@ def analyze(path: str, content_scan: bool = True) -> Verdict:
             v.files_scanned += 1
             if base in INSTALL_HOOK_FILES:  # package.json also code-ish
                 _scan_code(text, fp, v.findings)
+    # Manifest / permission-scope vetting (declared-vs-used mismatch, broad permissions).
+    used = {f.capability for f in v.findings}
+    for mf in scan_manifests(path, used_capabilities=used):
+        v.findings.append(Finding(mf.capability, mf.severity, mf.why, mf.file, mf.line, mf.atlas))
+    # Correlated exfiltration surface (credential_access + network_egress).
+    _add_exfiltration_surface(v.findings)
     if content_scan:
         v.content_matches = _agentsigs_scan(path)
     return v
